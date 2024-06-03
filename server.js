@@ -5,6 +5,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
 const os = require('os');
+const path = require('path');
 
 // Load environment variables from a .env file
 dotenv.config();
@@ -16,10 +17,8 @@ const port = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(cors());
 
-
-
 // Specify the path to your service account key file
-const keyFilePath = 'C:/Users/Lenovo/backend/service-account-key.json.json'; 
+const keyFilePath = path.join(__dirname, 'service-account-key.json.json');
 
 // Initialize Firestore with the key file
 const firestore = new Firestore({
@@ -36,6 +35,7 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASSWORD,  
     },
 });
+
 const getServerIPAddress = () => {
     const interfaces = os.networkInterfaces();
     for (const key in interfaces) {
@@ -50,7 +50,11 @@ const getServerIPAddress = () => {
 const serverIPAddress = getServerIPAddress();
 console.log(`Server running at http://${serverIPAddress}:${port}/`);
 
-// Sample route to update user profile
+// Root route to handle GET requests to "/"
+app.get('/', (req, res) => {
+    res.send('Welcome to the backend server!');
+});
+
 // Sample route to update user profile
 app.post('/api/users', async (req, res) => {
     const { name, email, phone, address, password, fields } = req.body;
@@ -91,8 +95,6 @@ app.post('/api/users', async (req, res) => {
     }
 });
 
-
-
 app.post('/send-email', (req, res) => {
     const { to, subject, body } = req.body;
   
@@ -100,8 +102,8 @@ app.post('/send-email', (req, res) => {
     const transporter = nodemailer.createTransport({
       service: 'Gmail',
       auth: {
-        user: 'nadineamdouni09@gmail.com', // Replace with your email address
-        pass: 'vflw vibp ybwv llgf'    // Replace with your email password
+        user: 'nadineamdouni09@gmail.com',
+        pass: 'vflw vibp ybwv llgf'
       }
     });
   
@@ -123,35 +125,30 @@ app.post('/send-email', (req, res) => {
         res.status(200).send('Email sent successfully');
       }
     });
-  });
+});
 
-
-// API endpoint to fetch all users (READ)
-// API endpoint to fetch all users and their subcollections (READ)
-// API endpoint to fetch all users and their subcollections (READ)
 app.get('/api/users', async (req, res) => {
     try {
-        // Fetch all user documents from Firestore
+        console.log("Fetching all user documents from Firestore...");
         const usersSnapshot = await db.collection('users').get();
         const users = [];
 
-        // Iterate through each user document
         for (const userDoc of usersSnapshot.docs) {
             const userData = userDoc.data();
             const userId = userDoc.id;
-            
-            // Fetch subcollection data for the user
+            console.log(`Processing user: ${userId}`);
+
             const fieldsSnapshot = await db.collection('users').doc(userId).collection('fields').get();
             const fields = [];
 
-            // Iterate through each field document
             for (const fieldDoc of fieldsSnapshot.docs) {
                 const fieldData = fieldDoc.data();
                 const fieldId = fieldDoc.id;
+                console.log(`Processing field: ${fieldId} for user: ${userId}`);
 
-                // Fetch subcollection 'nodes' data for each 'field'
                 const nodesSnapshot = await fieldDoc.ref.collection('nodes').get();
                 const nodes = nodesSnapshot.docs.map(doc => {
+                    console.log(`Processing node: ${doc.id} for field: ${fieldId} and user: ${userId}`);
                     return {
                         nodeId: doc.id,
                         fieldId,
@@ -160,7 +157,6 @@ app.get('/api/users', async (req, res) => {
                     };
                 });
 
-                // Append field data and nodes to the fields array
                 fields.push({
                     id: fieldId,
                     ...fieldData,
@@ -168,7 +164,6 @@ app.get('/api/users', async (req, res) => {
                 });
             }
 
-            // Append user data and fields to the users array
             users.push({
                 id: userId,
                 ...userData,
@@ -176,21 +171,18 @@ app.get('/api/users', async (req, res) => {
             });
         }
 
+        console.log("Successfully fetched all users and their subcollections.");
         return res.status(200).json(users);
     } catch (error) {
-        console.error('Failed to fetch users and subcollections:', error);
-        return res.status(500).json({ message: 'Failed to fetch users and subcollections.' });
+        console.error('Error occurred while fetching users and subcollections:', error);
+        return res.status(500).json({ message: 'Failed to fetch users and subcollections.', error: error.message });
     }
 });
 
-
-
-// API endpoint to log in a user
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        // Query Firestore to find a user with the provided email and password
         const userSnapshot = await db.collection('users')
             .where('email', '==', email)
             .where('password', '==', password)
@@ -203,16 +195,13 @@ app.post('/api/login', async (req, res) => {
         console.log('User authenticated successfully:', userData);
         const userId = userSnapshot.docs[0].id;
 
-        // Fetch subcollection 'fields' data for the user
         const fieldsSnapshot = await userSnapshot.docs[0].ref.collection('fields').get();
         const fields = [];
 
-        // Iterate through each field document
         for (const fieldDoc of fieldsSnapshot.docs) {
             const fieldData = fieldDoc.data();
             const fieldId = fieldDoc.id;
 
-            // Fetch subcollection 'nodes' data for each 'field'
             const nodesSnapshot = await fieldDoc.ref.collection('nodes').get();
             const nodes = nodesSnapshot.docs.map(doc => {
                 return {
@@ -223,7 +212,6 @@ app.post('/api/login', async (req, res) => {
                 };
             });
 
-            // Append field data and nodes to the fields array
             fields.push({
                 id: fieldId,
                 ...fieldData,
@@ -231,7 +219,6 @@ app.post('/api/login', async (req, res) => {
             });
         }
 
-        // User authenticated successfully, return user data and fields
         return res.status(200).json({ userData, fields });
     } catch (error) {
         console.error('Failed to authenticate user:', error);
@@ -239,13 +226,9 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-
-// API endpoint to delete a user by ID (DELETE)
 app.delete('/api/users/:id', async (req, res) => {
     try {
         const userId = req.params.id;
-
-        // Delete the user document from Firestore
         await db.collection('users').doc(userId).delete();
         return res.status(204).json({ message: 'User deleted successfully.' });
     } catch (error) {
@@ -253,43 +236,35 @@ app.delete('/api/users/:id', async (req, res) => {
         return res.status(500).json({ message: 'Failed to delete user.' });
     }
 });
+
 let authenticatedUsers = [];
 
-// Route for user logout
 app.post('/api/logout', (req, res) => {
     const token = req.body.token;
-
-    // Find the user by token and remove it from the authenticated users list
     authenticatedUsers = authenticatedUsers.filter(user => user.token !== token);
-
-    // Send a response indicating successful logout
     return res.status(200).json({ message: 'User logged out successfully' });
 });
+
 app.post('/update-password', (req, res) => {
     const { userId, password } = req.body;
-  
-    // Logic to update the password in the database
-    // Assuming you have a User model and a method to find and update a user by ID
     User.findById(userId, (err, user) => {
       if (err || !user) {
         return res.status(404).send('User not found');
       }
-  
-      user.password = password; // Ensure you hash the password before saving
+      user.password = password;
       user.save((err) => {
         if (err) {
           return res.status(500).send('Error updating password');
         }
-  
         res.status(200).send('Password updated successfully');
       });
     });
-  });
+});
 
-// Start the server
 app.listen(port, () => {
     console.log(`Express server running at http://${serverIPAddress}:${port}/`);
 });
+
 async function isEmailRegistered(email) {
     const snapshot = await db.collection('users').where('email', '==', email).get();
     return !snapshot.empty;
